@@ -31,6 +31,7 @@ export async function middleware(request) {
     pathname === '/signup' ||
     pathname === '/setup' ||
     pathname.startsWith('/auth') ||
+    pathname.startsWith('/share/') ||  // client-facing tokened pages: quote, couple form, agreement
     pathname.startsWith('/api/')
 
   if (!user && !isPublic) {

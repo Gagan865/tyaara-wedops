@@ -14,6 +14,7 @@ import {
 const SIDEBAR_BUSINESS = [
   { key: 'clients', label: 'Clients', Icon: Users, href: '/clients' },
   { key: 'venues', label: 'Venues', Icon: Building2, href: '/venues' },
+  { key: 'quotes', label: 'Quotations', Icon: FileText, href: '/quotes' },
   { key: 'notes', label: 'General Notes', Icon: StickyNote, href: '/notes' }
 ]
 import { SIDEBAR_PLANNING } from '@/lib/constants'

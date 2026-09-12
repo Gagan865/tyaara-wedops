@@ -33,6 +33,8 @@ export async function GET() {
       const sql2 = await readFile(path.join(process.cwd(), 'schema-2.sql'), 'utf8')
       const sql3 = await readFile(path.join(process.cwd(), 'schema-3.sql'), 'utf8')
       const sql4 = await readFile(path.join(process.cwd(), 'schema-4.sql'), 'utf8')
+      const sql5 = await readFile(path.join(process.cwd(), 'schema-5.sql'), 'utf8')
+      const sql6 = await readFile(path.join(process.cwd(), 'schema-6.sql'), 'utf8')
       body.sql = sql1 +
         '\n\n-- ============================================================\n' +
         '-- PROMPT 2 ADDITIONS BELOW\n' +
@@ -42,7 +44,13 @@ export async function GET() {
         '-- ============================================================\n\n' + sql3 +
         '\n\n-- ============================================================\n' +
         '-- PROMPT 4 ADDITIONS BELOW\n' +
-        '-- ============================================================\n\n' + sql4
+        '-- ============================================================\n\n' + sql4 +
+        '\n\n-- ============================================================\n' +
+        '-- PROMPT 5 ADDITIONS BELOW\n' +
+        '-- ============================================================\n\n' + sql5 +
+        '\n\n-- ============================================================\n' +
+        '-- PROMPT 6 ADDITIONS BELOW\n' +
+        '-- ============================================================\n\n' + sql6
       body.supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
     }
 
