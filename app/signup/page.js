@@ -63,6 +63,9 @@ export default function SignupPage() {
         <div className="text-sm text-slate-600 mt-4 text-center">
           Already have an account? <Link href="/login" className="text-[#0F4C3A] font-medium hover:underline">Sign in</Link>
         </div>
+        <div className="text-[11px] text-slate-400 mt-4 text-center">
+          By creating an account you agree to our <Link href="/terms" className="underline">Terms</Link> &amp; <Link href="/privacy" className="underline">Privacy Policy</Link>.
+        </div>
       </Card>
     </div>
   )

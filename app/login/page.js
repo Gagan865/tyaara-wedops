@@ -58,6 +58,9 @@ export default function LoginPage() {
         <div className="text-xs text-slate-500 mt-3 text-center">
           Need to install the schema first? <Link href="/setup" className="underline">One-time setup</Link>
         </div>
+        <div className="text-[11px] text-slate-400 mt-4 text-center">
+          By continuing you agree to our <Link href="/terms" className="underline">Terms</Link> &amp; <Link href="/privacy" className="underline">Privacy Policy</Link>.
+        </div>
       </Card>
     </div>
   )
