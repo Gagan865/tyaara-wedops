@@ -177,7 +177,7 @@ export default function QuoteEditorPage() {
   // ---- client sharing (login-free tokened links) ----
   const origin = typeof window !== 'undefined' ? window.location.origin : ''
   async function copyLink(url) { try { await navigator.clipboard.writeText(url); toast.success('Link copied') } catch { toast.error(url) } }
-  const clientName = q.client_name && q.client_name !== 'New client' ? q.client_name : ''
+  const clientName = q?.client_name && q.client_name !== 'New client' ? q.client_name : ''
 
   // Resolve (creating the token/record if needed) the public URL for each artefact.
   async function ensureQuoteUrl() {

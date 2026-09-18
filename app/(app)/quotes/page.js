@@ -4,13 +4,14 @@ import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { activeProjectQuery } from '@/lib/active-project'
 import { LoadingState, ErrorState, EmptyState, NoProjectState } from '@/components/app/page-state'
+import { useConfirm } from '@/components/app/confirm-dialog'
 import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { formatINR, formatDate } from '@/lib/format'
 import { computeQuoteTotals } from '@/lib/quote-total'
 import { toast } from 'sonner'
-import { Plus, FileText } from 'lucide-react'
+import { Plus, FileText, Trash2 } from 'lucide-react'
 
 const STATUS_STYLES = {
   draft: 'bg-slate-100 text-slate-700 border-slate-200',
@@ -37,6 +38,7 @@ function totalLabel(q) {
 
 export default function QuotesPage() {
   const router = useRouter()
+  const confirm = useConfirm()
   const [orgId, setOrgId] = useState(null)
   const [me, setMe] = useState(null)
   const [rows, setRows] = useState([])
@@ -97,6 +99,15 @@ export default function QuotesPage() {
     router.push(`/quotes/${data.id}`)
   }
 
+  async function remove(q) {
+    if (!await confirm({ title: `Delete ${q.quote_number}?`, description: `Removes the quotation for ${q.client_name} and all its sections, lines and adders. This cannot be undone.`, confirmLabel: 'Delete', destructive: true })) return
+    const supabase = createClient()
+    const { error } = await supabase.from('quotations').delete().eq('id', q.id)
+    if (error) return toast.error(error.message)
+    setRows((prev) => prev.filter((x) => x.id !== q.id))
+    toast.success('Quotation deleted')
+  }
+
   if (loading) return <LoadingState />
   if (noProject) return <NoProjectState />
   if (loadError) return <ErrorState error={loadError} onRetry={() => { setLoadError(null); setLoading(true); load() }} />
@@ -128,6 +139,7 @@ export default function QuotesPage() {
                 <TableHead className="text-right">Total (incl. GST)</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead>Valid until</TableHead>
+                <TableHead className="text-right">Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -140,6 +152,10 @@ export default function QuotesPage() {
                   <TableCell className="text-right whitespace-nowrap">{totalLabel(q)}</TableCell>
                   <TableCell><span className={`text-[10px] px-1.5 py-0.5 rounded border ${STATUS_STYLES[q.status] || STATUS_STYLES.draft}`}>{q.status}</span></TableCell>
                   <TableCell className="whitespace-nowrap text-slate-500">{formatDate(validUntil(q.created_at, q.valid_days))}</TableCell>
+                  <TableCell className="text-right">
+                    <Button size="icon" variant="ghost" className="h-7 w-7" title="Delete quotation"
+                      onClick={(e) => { e.stopPropagation(); remove(q) }}><Trash2 className="h-3.5 w-3.5 text-rose-500" /></Button>
+                  </TableCell>
                 </TableRow>
               ))}
             </TableBody>
