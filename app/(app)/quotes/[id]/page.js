@@ -133,6 +133,14 @@ export default function QuoteEditorPage() {
     setAdders((as) => as.filter((a) => a.id !== aid))
   }
 
+  async function deleteQuote() {
+    if (!await confirm({ title: `Delete ${q.quote_number}?`, description: 'Removes this quotation and all its sections, lines and adders. This cannot be undone.', confirmLabel: 'Delete', destructive: true })) return
+    const { error } = await supabase.from('quotations').delete().eq('id', id)
+    if (error) return toast.error(error.message)
+    toast.success('Quotation deleted')
+    router.push('/quotes')
+  }
+
   async function duplicateVersion() {
     if (!await confirm({ title: 'Duplicate as new version?', description: `Creates V${(q.version || 1) + 1} as a draft and marks this one superseded.`, confirmLabel: 'Duplicate' })) return
     const { data: { user } } = await supabase.auth.getUser()
@@ -287,6 +295,7 @@ export default function QuoteEditorPage() {
           </Button>
           <a href={`/quotes/${id}/print`} target="_blank" rel="noopener noreferrer"><Button variant="outline" size="sm"><Printer className="h-4 w-4 mr-1.5" />Print / PDF</Button></a>
           <Button variant="outline" size="sm" onClick={duplicateVersion}><Copy className="h-4 w-4 mr-1.5" />New version</Button>
+          <Button variant="outline" size="sm" className="text-rose-600 hover:text-rose-700 hover:bg-rose-50" onClick={deleteQuote}><Trash2 className="h-4 w-4 mr-1.5" />Delete</Button>
         </div>
       </div>
 
