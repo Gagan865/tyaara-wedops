@@ -15,7 +15,7 @@ import { formatINR, formatDate, rupeesToPaise, paiseToRupees } from '@/lib/forma
 import { computeQuoteTotals, QUOTE_BUCKETS, BUCKET_LABELS } from '@/lib/quote-total'
 import { DEFAULT_AGREEMENT_TERMS } from '@/lib/agreement-template'
 import { toast } from 'sonner'
-import { Plus, Trash2, Printer, Copy, ArrowLeft, Eye, EyeOff, FileText, Users, FileSignature } from 'lucide-react'
+import { Plus, Trash2, Printer, Copy, ArrowLeft, Eye, EyeOff, FileText, Users, FileSignature, MessageCircle, Mail } from 'lucide-react'
 
 const STATUSES = ['draft', 'sent', 'accepted', 'expired', 'superseded']
 
@@ -33,6 +33,8 @@ export default function QuoteEditorPage() {
   const [coupleForm, setCoupleForm] = useState(null)
   const [agreement, setAgreement] = useState(null)
   const [agOpen, setAgOpen] = useState(false)
+  const [email, setEmail] = useState(null)       // { kind, url, to } when the email dialog is open
+  const [emailSending, setEmailSending] = useState(false)
 
   async function load() {
     try {
@@ -175,25 +177,72 @@ export default function QuoteEditorPage() {
   // ---- client sharing (login-free tokened links) ----
   const origin = typeof window !== 'undefined' ? window.location.origin : ''
   async function copyLink(url) { try { await navigator.clipboard.writeText(url); toast.success('Link copied') } catch { toast.error(url) } }
+  const clientName = q.client_name && q.client_name !== 'New client' ? q.client_name : ''
 
-  async function shareQuote() {
+  // Resolve (creating the token/record if needed) the public URL for each artefact.
+  async function ensureQuoteUrl() {
     let tok = q.public_token
     if (!tok) {
       tok = crypto.randomUUID()
       const { error } = await supabase.from('quotations').update({ public_token: tok }).eq('id', id)
-      if (error) return toast.error(error.message)
+      if (error) { toast.error(error.message); return null }
       setQ((p) => ({ ...p, public_token: tok }))
     }
-    copyLink(`${origin}/share/quote/${tok}`)
+    return `${origin}/share/quote/${tok}`
   }
-  async function shareForm() {
-    if (coupleForm) return copyLink(`${origin}/share/form/${coupleForm.public_token}`)
+  async function ensureFormUrl() {
+    if (coupleForm) return `${origin}/share/form/${coupleForm.public_token}`
     const tok = crypto.randomUUID()
     const { data, error } = await supabase.from('couple_forms')
       .insert({ org_id: orgId, quotation_id: id, public_token: tok, title: 'Wedding details' }).select('*').maybeSingle()
-    if (error || !data) return toast.error(error?.message || 'Could not create form')
+    if (error || !data) { toast.error(error?.message || 'Could not create form'); return null }
     setCoupleForm(data)
-    copyLink(`${origin}/share/form/${tok}`)
+    return `${origin}/share/form/${tok}`
+  }
+  function agreementUrl() { return agreement ? `${origin}/share/agreement/${agreement.public_token}` : null }
+
+  async function urlFor(kind) {
+    if (kind === 'quote') return ensureQuoteUrl()
+    if (kind === 'form') return ensureFormUrl()
+    const u = agreementUrl()
+    if (!u) toast.error('Create the agreement first')
+    return u
+  }
+  async function shareQuote() { const u = await ensureQuoteUrl(); if (u) copyLink(u) }
+  async function shareForm() { const u = await ensureFormUrl(); if (u) copyLink(u) }
+
+  const SHARE_MSG = {
+    quote: (n) => `Hi${n ? ' ' + n : ''}! Here's your wedding quotation from Tyaara Weddings. View & download it here: `,
+    form: (n) => `Hi${n ? ' ' + n : ''}! Please share your wedding details with us via this quick form: `,
+    agreement: (n) => `Hi${n ? ' ' + n : ''}! Please review and accept your agreement with Tyaara Weddings here: `
+  }
+  async function whatsappShare(kind) {
+    const url = await urlFor(kind)
+    if (!url) return
+    const phone = (q.client_contact || '').replace(/\D/g, '')
+    const base = phone.length >= 10 ? `https://wa.me/${phone}` : 'https://wa.me/'
+    window.open(`${base}?text=${encodeURIComponent(SHARE_MSG[kind](clientName) + url)}`, '_blank')
+  }
+  async function openEmail(kind) {
+    const url = await urlFor(kind)
+    if (!url) return
+    setEmail({ kind, url, to: /@/.test(q.client_contact || '') ? q.client_contact : '' })
+  }
+  async function sendEmail(e) {
+    e.preventDefault()
+    const to = new FormData(e.currentTarget).get('to')
+    const cfg = {
+      quote: { subject: 'Your wedding quotation — Tyaara Weddings', heading: 'Your quotation is ready', message: `Hi${clientName ? ' ' + clientName : ''}, please find your wedding quotation from Tyaara Weddings. You can view the full breakdown and download a PDF.`, ctaLabel: 'View quotation' },
+      form: { subject: 'Share your wedding details — Tyaara Weddings', heading: 'Tell us about your wedding', message: `Hi${clientName ? ' ' + clientName : ''}, please take a moment to share your wedding details so we can plan everything beautifully.`, ctaLabel: 'Open the form' },
+      agreement: { subject: 'Your agreement — Tyaara Weddings', heading: 'Please review your agreement', message: `Hi${clientName ? ' ' + clientName : ''}, please review the terms of your agreement with Tyaara Weddings and accept online.`, ctaLabel: 'Review & accept' }
+    }[email.kind]
+    setEmailSending(true)
+    const r = await fetch('/api/share/email', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ to, url: email.url, ...cfg }) })
+    const j = await r.json()
+    setEmailSending(false)
+    if (!r.ok) return toast.error(j.error || 'Could not send email')
+    toast.success('Email sent to ' + to)
+    setEmail(null)
   }
   async function saveAgreement(e) {
     e.preventDefault()
@@ -417,29 +466,50 @@ export default function QuoteEditorPage() {
       <Card className="p-5 space-y-3">
         <div>
           <div className="font-serif text-lg font-semibold">Send to client</div>
-          <p className="text-sm text-slate-500">Login-free links to share over WhatsApp. Cost &amp; margin never appear on any of these.</p>
+          <p className="text-sm text-slate-500">Share over WhatsApp or email, or copy a login-free link. Cost &amp; margin never appear on any of these.</p>
         </div>
         <div className="grid sm:grid-cols-3 gap-3">
           <div className="rounded-lg border border-slate-200 p-3 flex flex-col">
             <div className="text-sm font-medium flex items-center gap-2"><FileText className="h-4 w-4 text-[#0F4C3A]" />Quotation</div>
             <p className="text-xs text-slate-500 mt-1 flex-1">Client-safe PDF view of this quote.</p>
-            <Button size="sm" variant="outline" className="mt-2" onClick={shareQuote}><Copy className="h-3.5 w-3.5 mr-1.5" />{q.public_token ? 'Copy link' : 'Create link'}</Button>
+            <div className="flex items-center gap-1.5 mt-2">
+              <Button size="sm" variant="outline" className="flex-1" onClick={shareQuote}><Copy className="h-3.5 w-3.5 mr-1.5" />{q.public_token ? 'Copy' : 'Link'}</Button>
+              <Button size="icon" variant="outline" className="h-8 w-8" title="Send on WhatsApp" onClick={() => whatsappShare('quote')}><MessageCircle className="h-4 w-4 text-emerald-600" /></Button>
+              <Button size="icon" variant="outline" className="h-8 w-8" title="Send by email" onClick={() => openEmail('quote')}><Mail className="h-4 w-4" /></Button>
+            </div>
           </div>
           <div className="rounded-lg border border-slate-200 p-3 flex flex-col">
             <div className="text-sm font-medium flex items-center gap-2"><Users className="h-4 w-4 text-[#0F4C3A]" />Couple form</div>
             <p className="text-xs text-slate-500 mt-1 flex-1">{coupleForm ? (coupleForm.status === 'submitted' ? 'Submitted ✓ — reopen to view answers.' : 'Awaiting the couple’s response.') : 'Bride/groom intake form.'}</p>
-            <Button size="sm" variant="outline" className="mt-2" onClick={shareForm}><Copy className="h-3.5 w-3.5 mr-1.5" />{coupleForm ? 'Copy link' : 'Create form'}</Button>
+            <div className="flex items-center gap-1.5 mt-2">
+              <Button size="sm" variant="outline" className="flex-1" onClick={shareForm}><Copy className="h-3.5 w-3.5 mr-1.5" />{coupleForm ? 'Copy' : 'Create'}</Button>
+              <Button size="icon" variant="outline" className="h-8 w-8" title="Send on WhatsApp" onClick={() => whatsappShare('form')}><MessageCircle className="h-4 w-4 text-emerald-600" /></Button>
+              <Button size="icon" variant="outline" className="h-8 w-8" title="Send by email" onClick={() => openEmail('form')}><Mail className="h-4 w-4" /></Button>
+            </div>
           </div>
           <div className="rounded-lg border border-slate-200 p-3 flex flex-col">
             <div className="text-sm font-medium flex items-center gap-2"><FileSignature className="h-4 w-4 text-[#0F4C3A]" />Agreement</div>
             <p className="text-xs text-slate-500 mt-1 flex-1">{agreement ? (agreement.status === 'accepted' ? `Accepted by ${agreement.accepted_name} ✓` : 'Sent — awaiting acceptance.') : 'Tyaara T&C with e-acceptance.'}</p>
-            <div className="flex gap-2 mt-2">
-              <Button size="sm" variant="outline" onClick={() => setAgOpen(true)}>{agreement ? 'Edit' : 'Create'}</Button>
-              {agreement && <Button size="sm" variant="outline" onClick={() => copyLink(`${origin}/share/agreement/${agreement.public_token}`)}><Copy className="h-3.5 w-3.5 mr-1.5" />Copy link</Button>}
+            <div className="flex items-center gap-1.5 mt-2">
+              <Button size="sm" variant="outline" className="flex-1" onClick={() => setAgOpen(true)}>{agreement ? 'Edit' : 'Create'}</Button>
+              <Button size="icon" variant="outline" className="h-8 w-8" title="Copy link" onClick={() => { const u = agreementUrl(); u ? copyLink(u) : toast.error('Create the agreement first') }}><Copy className="h-4 w-4" /></Button>
+              <Button size="icon" variant="outline" className="h-8 w-8" title="Send on WhatsApp" onClick={() => whatsappShare('agreement')}><MessageCircle className="h-4 w-4 text-emerald-600" /></Button>
+              <Button size="icon" variant="outline" className="h-8 w-8" title="Send by email" onClick={() => openEmail('agreement')}><Mail className="h-4 w-4" /></Button>
             </div>
           </div>
         </div>
       </Card>
+
+      <Dialog open={Boolean(email)} onOpenChange={(o) => { if (!emailSending && !o) setEmail(null) }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader><DialogTitle>Email {email?.kind === 'form' ? 'the couple form' : email?.kind === 'agreement' ? 'the agreement' : 'the quotation'}</DialogTitle></DialogHeader>
+          <form onSubmit={sendEmail} className="space-y-3">
+            <div><Label>Recipient email</Label><Input name="to" type="email" required defaultValue={email?.to || ''} placeholder="couple@example.com" /></div>
+            <p className="text-[11px] text-slate-500">A branded email with the link is sent from Tyaara Weddings. Requires email to be configured (RESEND_API_KEY).</p>
+            <DialogFooter><Button type="submit" className="bg-[#0F4C3A]" disabled={emailSending}><Mail className="h-4 w-4 mr-2" />{emailSending ? 'Sending…' : 'Send email'}</Button></DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={agOpen} onOpenChange={setAgOpen}>
         <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
